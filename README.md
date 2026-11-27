@@ -38,12 +38,12 @@ Après de grosses modifications du planning, supprime le calendrier « Prépa »
 Le site envoie tes tâches et rappels à un raccourci de l'app **Raccourcis**. À créer une seule fois :
 
 1. Ouvre **Raccourcis** → **+** (nouveau raccourci), nomme-le exactement **`QG Rappels`**.
-2. Ajoute l'action **Diviser le texte** : texte = *Entrée du raccourci*, séparateur = *Nouvelles lignes*.
-3. Ajoute **Répéter avec chaque élément** sur le résultat (*Texte divisé*).
+2. Ajoute l'action **Scinder le texte** : texte = *Entrée du raccourci*, séparateur = *Nouvelles lignes*.
+3. Ajoute **Répéter avec chaque élément** sur le résultat (*Texte scindé*).
 4. Dans la boucle, ajoute :
-   - **Diviser le texte** : texte = *Élément de répétition*, séparateur = *Personnalisé* → `|`
+   - **Scinder le texte** : texte = *Élément de répétition*, séparateur = *Personnalisé* → `|`
    - **Obtenir l'élément de la liste** : *Premier élément* (c'est le titre)
-   - **Obtenir l'élément de la liste** : *Dernier élément* de *Texte divisé* (c'est la date)
+   - **Obtenir l'élément de la liste** : *Dernier élément* de *Texte scindé* (c'est la date)
    - **Ajouter un nouveau rappel** : titre = premier élément, liste = « Prépa » (crée-la avant dans Rappels), **Alerte** = dernier élément.
 5. Dans les réglages du raccourci (ⓘ), coche **Recevoir** → *Texte*.
 

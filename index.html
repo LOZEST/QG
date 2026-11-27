@@ -118,6 +118,22 @@ details summary{cursor:pointer;color:var(--mute);padding:12px 0;font-size:14px}
 #toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,120px);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:8px;display:flex;gap:14px;align-items:center;font-size:14px;max-width:min(92vw,480px);z-index:9;transition:transform .2s,opacity .2s;opacity:0;pointer-events:none}
 #toast.on{transform:translate(-50%,0);opacity:1;pointer-events:auto}
 #toast button{background:none;border:0;color:inherit;font:inherit;text-decoration:underline;cursor:pointer}
+.dur{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin-top:12px;font-size:13px;color:var(--mute)}
+.dur button{border:0;background:none;font:inherit;color:var(--mute);cursor:pointer;padding:4px 0}
+.dur button[aria-pressed=true]{color:var(--ink);text-decoration:underline;text-underline-offset:4px}
+.dur input{width:4.5em;min-height:28px;padding:2px 0;font-size:13px;text-align:center}
+.ed{flex:none;border:0;background:none;color:var(--mute);font:inherit;font-size:13px;cursor:pointer;opacity:0;padding:6px 4px}
+.row:hover .ed,.ed:focus-visible{opacity:1}.ed:hover{color:var(--ink)}@media(hover:none){.ed{opacity:1}}
+.evedit{width:100%;margin:0;padding:6px 0;background:none}
+#zen{position:fixed;inset:0;z-index:20;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:24px;text-align:center}
+#zen.on{display:flex}
+#zen .tm-time{font-size:clamp(90px,24vw,300px);font-weight:200;margin:0;line-height:1;color:var(--ink)}
+#zen .bar{width:min(640px,80vw)}
+#zen select{width:auto;border:0;font-size:17px;color:var(--mute);text-align:center}
+#zen .row2{justify-content:center;margin:0}
+#zen .ph{font-size:15px;color:var(--mute)}
+#zen .zq{position:absolute;top:18px;right:20px}
+body.zen{overflow:hidden}
 #widget{display:none}
 body.widget header,body.widget main{display:none}
 body.widget #widget{display:block}
@@ -147,6 +163,7 @@ body.widget #widget{display:block}
 </header>
 <main id="view"></main>
 <div id="widget"></div>
+<div id="zen" role="dialog" aria-label="Minuteur plein écran"></div>
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -239,8 +256,32 @@ function remRow(r){return`<li class="row${r.off?' done':''}" data-id="${esc(r.id
  <div class="rt"><span>${esc(r.t)}</span><span class="meta">${r.rep?`<span class="pr">${r.rep==='day'?'tous les jours':'chaque semaine'}</span>`:''}</span></div>
  <button class="x" data-act="rem-del" aria-label="Supprimer">×</button></li>`}
 const cmpEv=(a,b)=>a.date!==b.date?(a.date<b.date?-1:1):((a.h||'')<(b.h||'')?-1:1);
-const evRow=(e,withDate)=>`<li class="row" data-id="${esc(e.id)}"><span class="when">${withDate?esc(fdate(e.date)):''}${e.h?(withDate?' ':'')+esc(e.h):''}</span>
- <div class="rt"><span><span class="tag" data-t="${esc(e.type)}">${esc(e.type)}</span> ${chip(e.mat)}</span>${e.label?`<span class="meta">${esc(e.label)}</span>`:''}</div>${withDate?'<button class="x" data-act="ev-del" aria-label="Supprimer">×</button>':''}</li>`;
+let editEv=null;
+const icsEsc=s=>String(s||'').replace(/\\/g,'\\\\').replace(/;/g,'\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n');
+const icsD=d=>dkey(d).replace(/-/g,''),icsT=d=>icsD(d)+'T'+pad(d.getHours())+pad(d.getMinutes())+'00';
+function buildICS(evs){const st=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+/,'');
+ const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//QG Prepa//FR','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-CALNAME:Prépa','X-WR-TIMEZONE:Europe/Paris',
+ 'BEGIN:VTIMEZONE','TZID:Europe/Paris','BEGIN:DAYLIGHT','TZOFFSETFROM:+0100','TZOFFSETTO:+0200','TZNAME:CEST','DTSTART:19700329T020000','RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU','END:DAYLIGHT','BEGIN:STANDARD','TZOFFSETFROM:+0200','TZOFFSETTO:+0100','TZNAME:CET','DTSTART:19701025T030000','RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU','END:STANDARD','END:VTIMEZONE'];
+ for(const e of evs){const sum=`${e.type==='Colle'?'Khôlle':e.type==='SI'?'SI':e.type} ${e.type==='SI'?'':e.mat||''}`.trim(),loc=(String(e.label).match(/salle\s+(\S+)/i)||[])[1];
+  L.push('BEGIN:VEVENT','UID:'+e.id+'@qgprepa','DTSTAMP:'+st,'SUMMARY:'+icsEsc(sum));
+  if(e.h){const s=new Date(e.date+'T'+e.h),en=new Date(s.getTime()+(e.type==='SI'?110:e.type==='DS'?180:60)*6e4);L.push('DTSTART;TZID=Europe/Paris:'+icsT(s),'DTEND;TZID=Europe/Paris:'+icsT(en))}
+  else{const s=new Date(e.date+'T12:00');L.push('DTSTART;VALUE=DATE:'+icsD(s),'DTEND;VALUE=DATE:'+icsD(addDays(1,s)))}
+  if(e.label)L.push('DESCRIPTION:'+icsEsc(e.label));if(loc)L.push('LOCATION:'+icsEsc('Salle '+loc));
+  if(e.type==='Colle'||e.type==='DS'||e.type==='Concours blanc')L.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+icsEsc(sum),'TRIGGER:'+(e.h?'-PT30M':'-PT6H'),'END:VALARM');
+  L.push('END:VEVENT')}
+ L.push('END:VCALENDAR');return L.join('\r\n')}
+function download(name,text,type){try{const u=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),5000)}catch(e){}
+ if(typeof claude!=='undefined')toast('Si rien ne se télécharge ici, fais-le depuis la version GitHub du site.')}
+const SHORTCUT='QG Rappels';
+function toReminders(items){if(!items.length){toast('Rien à envoyer.');return}
+ const txt=items.map(i=>`${i.t.replace(/[|\n]/g,' ')}|${i.at}`).join('\n');
+ const a=document.createElement('a');a.href='shortcuts://run-shortcut?name='+encodeURIComponent(SHORTCUT)+'&input=text&text='+encodeURIComponent(txt);document.body.appendChild(a);a.click();a.remove();
+ toast(`${items.length} élément${items.length>1?'s':''} envoyé${items.length>1?'s':''} au raccourci « ${SHORTCUT} ».`)}
+const evEdit=e=>`<li class="row" data-id="${esc(e.id)}"><form class="form evedit" data-id="${esc(e.id)}"><label>Date<input type="date" name="date" value="${esc(e.date)}" required></label><label>Heure<input type="time" name="h" value="${esc(e.h)}"></label>
+ <label>Type<select name="type">${['Colle','DS','Concours blanc','SI','TP','DM','Autre'].map(t=>`<option${t===e.type?' selected':''}>${t}</option>`).join('')}</select></label><label>Matière<select name="mat"><option value="">—</option>${subjOpts(e.mat)}</select></label>
+ <label class="wide">Détail<input name="label" value="${esc(e.label)}"></label><div class="row2" style="margin:0"><button class="btn">Enregistrer</button><button type="button" class="btn ghost" data-act="ev-cancel">Annuler</button></div></form></li>`;
+const evRow=(e,withDate)=>withDate&&editEv===e.id?evEdit(e):`<li class="row" data-id="${esc(e.id)}"><span class="when">${withDate?esc(fdate(e.date)):''}${e.h?(withDate?' ':'')+esc(e.h):''}</span>
+ <div class="rt"><span><span class="tag" data-t="${esc(e.type)}">${esc(e.type)}</span> ${chip(e.mat)}</span>${e.label?`<span class="meta">${esc(e.label)}</span>`:''}</div>${withDate?'<button class="ed" data-act="ev-edit">Modifier</button><button class="x" data-act="ev-del" aria-label="Supprimer">×</button>':''}</li>`;
 const errDue=()=>S.errs.filter(e=>!e.ok&&e.next<=dkey());
 const gPct=g=>g.steps.length?Math.round(100*g.steps.filter(s=>s.d).length/g.steps.length):0;
 
@@ -257,7 +298,7 @@ V.aujourdhui=()=>{const td=todayTodos(),k=dkey(),dn=S.todos.filter(t=>t.done&&t.
   <form id="f-quick" class="quick"><input name="t" required placeholder="Nouvelle tâche" aria-label="Nouvelle tâche"><select name="mat" aria-label="Matière">${subjOpts()}</select></form></section>
  ${timerCard()}
   <section><h3>Au programme</h3>${wk.length?`<ul class="list">${wk.map(e=>evRow(e,false)).join('')}</ul>`:empty('Ni khôlle ni DS aujourd’hui.')}</section>
-  ${soon.length?`<section><h3>7 prochains jours</h3><ul class="list">${soon.map(e=>evRow(e,true).replace(/<button class="x"[^]*?<\/button>/,'')).join('')}</ul><a class="link" href="#planning">Tout le planning</a></section>`:''}
+  ${soon.length?`<section><h3>7 prochains jours</h3><ul class="list">${soon.map(e=>evRow(e,true).replace(/<button class="ed"[^]*?<\/button><button class="x"[^]*?<\/button>/,'')).join('')}</ul><a class="link" href="#planning">Tout le planning</a></section>`:''}
   ${ed?`<section><h3>Carnet d’erreurs</h3><p style="margin:0"><a class="link" style="margin:0;color:var(--ink)" href="#erreurs">${ed} erreur${ed>1?'s':''} à revoir aujourd’hui</a></p></section>`:''}
   ${up.length?`<section><h3>Rappels</h3><ul class="list">${up.map(remRow).join('')}</ul></section>`:''}
   <section><h3>Objectifs</h3>${S.goals.slice(0,3).map(g=>`<div class="gm"><p>${esc(g.t)}</p><div class="prog" style="margin:4px 0 0"><div class="bar"><i style="width:${gPct(g)}%"></i></div><b>${gPct(g)}%</b></div></div>`).join('')||empty('Aucun.')}</section>`};
@@ -270,7 +311,7 @@ V.taches=()=>`<h1>Tâches</h1><form id="f-todo" class="form">
  <label>Matière<select name="mat">${subjOpts()}</select></label><label>Pour le<input type="date" name="due" value="${dkey()}"></label>
  <label>Priorité<select name="prio"><option value="normale">Normale</option><option value="haute">Haute</option></select></label><button class="btn">Ajouter</button></form>
  <div class="filters"><div class="seg" role="group" aria-label="Filtre">${[['todo','À faire'],['done','Faites'],['all','Toutes']].map(([k,l])=>`<button data-act="tf" data-v="${k}" aria-pressed="${tf===k}">${l}</button>`).join('')}</div>
- <input id="tq" type="search" placeholder="Rechercher" value="${esc(tq)}" aria-label="Rechercher"></div>
+ <input id="tq" type="search" placeholder="Rechercher" value="${esc(tq)}" aria-label="Rechercher"><button class="btn ghost sm" data-act="rem-todos">Envoyer vers Rappels</button></div>
  <ul class="list" id="tlist">${tList()}</ul>`;
 
 V.objectifs=()=>`<h1>Objectifs</h1><form id="f-goal" class="form"><label class="wide">Objectif<input name="t" required placeholder="Nouvel objectif"></label>
@@ -284,7 +325,7 @@ V.rappels=()=>{const now=new Date(),h=pad(Math.min(23,now.getHours()+1))+':00',a
  return`<h1>Rappels</h1>${notifNote()}<form id="f-rem" class="form"><label class="wide">Rappel<input name="t" required placeholder="Nouveau rappel"></label>
  <label>Jour<input type="date" name="d" value="${dkey()}" required></label><label>Heure<input type="time" name="h" value="${h}" required></label>
  <label>Répéter<select name="rep"><option value="">Jamais</option><option value="day">Tous les jours</option><option value="week">Chaque semaine</option></select></label><button class="btn">Ajouter</button></form>
- <ul class="list">${act.map(remRow).join('')||empty('Aucun rappel.')}</ul>
+ <ul class="list">${act.map(remRow).join('')||empty('Aucun rappel.')}</ul>${act.length?'<div class="row2"><button class="btn ghost sm" data-act="rem-apple">Envoyer vers Rappels d’Apple</button></div>':''}
  ${past.length?`<details><summary>Passés (${past.length})</summary><ul class="list">${past.slice(-30).reverse().map(remRow).join('')}</ul><button class="btn ghost sm" data-act="rem-clear">Effacer les rappels passés</button></details>`:''}`};
 function notifNote(){if(isApp){if(perms.notifications==='granted')return'';
   return'<p class="ex"><button class="link" data-act="perms">Activer les notifications</button></p>'}
@@ -296,7 +337,7 @@ V.planning=()=>{const k=dkey(),f=e=>pf==='all'||(pf==='DS'?(e.type==='DS'||e.typ
  const wkOf=d=>{const x=new Date(d+'T12:00');x.setDate(x.getDate()-((x.getDay()+6)%7));return dkey(x)};
  let cur='',html='';for(const e of up){const w=wkOf(e.date);if(w!==cur){if(cur)html+='</ul>';cur=w;html+=`<h3 class="wk">Semaine du ${esc(new Date(w+'T12:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long'}))}</h3><ul class="list">`}html+=evRow(e,true)}if(cur)html+='</ul>';
  return`<h1>Planning</h1><p class="small" style="margin:-12px 0 16px">Khôlles groupe 2 · DS TSI 1 · SI groupe A</p>
- <div class="filters"><div class="seg" role="group" aria-label="Filtre">${[['all','Tout'],['Colle','Khôlles'],['DS','DS']].map(([v,l])=>`<button data-act="pf" data-v="${v}" aria-pressed="${pf===v}">${l}</button>`).join('')}</div></div>
+ <div class="filters"><button class="btn ghost sm" data-act="ics" style="order:2">Exporter vers Calendrier</button><div class="seg" role="group" aria-label="Filtre">${[['all','Tout'],['Colle','Khôlles'],['DS','DS']].map(([v,l])=>`<button data-act="pf" data-v="${v}" aria-pressed="${pf===v}">${l}</button>`).join('')}</div></div>
  ${html||empty('Rien à venir.')}
  <details><summary>Ajouter un événement</summary><form id="f-ev" class="form"><label>Date<input type="date" name="date" value="${dkey()}" required></label><label>Heure<input type="time" name="h"></label>
  <label>Type<select name="type"><option>Colle</option><option>DS</option><option>Concours blanc</option><option>DM</option><option>TP</option><option>Autre</option></select></label><label>Matière<select name="mat"><option value="">—</option>${subjOpts()}</select></label>
@@ -347,9 +388,11 @@ let impArm=false;
 V.reglages=()=>`<h1>Réglages</h1><div class="cols">
  <form id="f-set"><h3>Concours</h3>
  <label>Nom<input name="cname" value="${esc(S.set.cname)}" placeholder="les écrits des concours"></label><br><label>Date<input type="date" name="concours" value="${esc(S.set.concours)}" required></label><br><button class="btn">Enregistrer</button></form>
- <form id="f-pset"><h3>Minuteur</h3><label>Travail (min)<input name="work" type="number" min="5" max="120" value="${S.set.work}"></label><label>Pause (min)<input name="brk" type="number" min="1" max="60" value="${S.set.brk}"></label><button class="btn">Enregistrer</button></form>
+ <form id="f-pset"><h3>Minuteur</h3><label>Travail (min)<input name="work" type="number" min="1" max="240" value="${S.set.work}"></label><label>Pause (min)<input name="brk" type="number" min="1" max="60" value="${S.set.brk}"></label><button class="btn">Enregistrer</button></form>
  <form id="f-subj"><h3>Matières</h3><label>Une par ligne<textarea name="s" rows="7">${esc(S.set.subjects.join('\n'))}</textarea></label><br><button class="btn">Enregistrer</button></form>
  <section id="mac"><h3>Mac</h3>${macBlock()}</section>
+ <section><h3>Calendrier et Rappels d’Apple</h3><p><b>Calendrier</b> : dans Planning, « Exporter vers Calendrier » crée un fichier .ics. Ouvre-le et choisis un calendrier « Prépa ». Les khôlles ont une alerte 30 min avant, les DS la veille au soir.</p>
+ <p><b>Rappels</b> : crée une fois le raccourci « QG Rappels » dans l’app Raccourcis (étapes dans le README du dépôt), puis utilise « Envoyer vers Rappels » dans Tâches ou Rappels.</p></section>
  <section><h3>Sauvegarde</h3><p>${ref?'Synchronisée avec ton compte Claude.':'Sur cet appareil uniquement.'}</p>
  <div class="row2" style="margin:0 0 12px"><button class="btn ghost" data-act="export">Copier mes données</button></div>
  <label>Restaurer (coller une sauvegarde)<textarea id="imp" placeholder='{"todos":[…]}'></textarea></label><div class="row2"><button class="btn ghost" data-act="import">${impArm?'Confirmer : tout remplacer':'Restaurer'}</button></div></section></div>`;
@@ -363,12 +406,26 @@ function macBlock(){if(isApp){const w=mode()==='widget',ok=perms.notifications==
 /* ---------- minuteur ---------- */
 const P={run:false,phase:'work',end:0,left:S.set.work*60,mat:S.set.subjects[0]};
 const fmt=s=>`${pad(Math.floor(s/60))}:${pad(s%60)}`;
+function durRow(){const w=S.set.work,b=S.set.brk;return`<div class="dur"><span>Focus</span>${[25,45,60,90].map(m=>`<button data-act="p-dur" data-k="work" data-v="${m}" aria-pressed="${w===m}">${m}</button>`).join('')}<input class="p-custom" data-k="work" type="number" min="1" max="240" value="${w}" aria-label="Durée du focus en minutes">min
+ <span style="margin-left:8px">Pause</span>${[5,10,15].map(m=>`<button data-act="p-dur" data-k="brk" data-v="${m}" aria-pressed="${b===m}">${m}</button>`).join('')}<input class="p-custom" data-k="brk" type="number" min="1" max="60" value="${b}" aria-label="Durée de la pause en minutes">min</div>`}
+function setDur(k,v){v=Math.round(+v);if(!(v>=1))return;S.set[k]=Math.min(k==='work'?240:60,v);if(!P.run&&((k==='work')===(P.phase==='work')))P.left=S.set[k]*60;save()}
+function zenHTML(){return`<button class="btn ghost zq" data-act="zen-off">Quitter · Échap</button><div class="ph">${P.phase==='work'?'Focus':'Pause'}</div>
+ <select class="p-mat" aria-label="Matière">${subjOpts(P.mat)}</select><div class="tm-time">${fmt(P.left)}</div><div class="bar"><i class="tm-bar"></i></div>
+ <div class="row2"><button class="btn ghost" data-act="p-add" data-v="-5">−5 min</button><button class="btn tm-go" data-act="p-go">${P.run?'Pause':'Démarrer'}</button><button class="btn ghost" data-act="p-add" data-v="5">+5 min</button></div>
+ <div class="row2"><button class="btn ghost sm" data-act="p-reset">Reset</button><button class="btn ghost sm" data-act="p-skip">${P.phase==='work'?'Passer à la pause':'Reprendre le focus'}</button></div>${durRow()}`}
+let zenOn=false;
+function zen(on){zenOn=on;const z=$('#zen');z.classList.toggle('on',on);document.body.classList.toggle('zen',on);
+ if(on){z.innerHTML=zenHTML();drawTimer();try{document.documentElement.requestFullscreen?.().catch(()=>{})}catch(e){}}
+ else{z.innerHTML='';try{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})}catch(e){}}}
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&zenOn)zen(false)});
+document.addEventListener('keydown',e=>{if(!zenOn)return;if(e.key==='Escape')zen(false);if(e.key===' '&&e.target.tagName!=='INPUT'&&e.target.tagName!=='SELECT'){e.preventDefault();pGo()}});
 function timerCard(){const w7=[...Array(7)].reduce((a,_,i)=>a+minsOn(dkey(addDays(-i))),0);return`<section class="timer ${P.phase}"><div class="th"><h3>${P.phase==='work'?'Focus':'Pause'}</h3><select class="p-mat" aria-label="Matière du focus">${subjOpts(P.mat)}</select></div>
  <div class="tm-time">${fmt(P.left)}</div><div class="bar"><i class="tm-bar"></i></div>
- <div class="row2"><button class="btn tm-go" data-act="p-go">${P.run?'Pause':'Démarrer'}</button><button class="btn ghost" data-act="p-reset">Reset</button><button class="btn ghost" data-act="p-skip">${P.phase==='work'?'Passer':'Reprendre'}</button></div>
+ <div class="row2"><button class="btn tm-go" data-act="p-go">${P.run?'Pause':'Démarrer'}</button><button class="btn ghost" data-act="p-reset">Reset</button><button class="btn ghost" data-act="p-skip">${P.phase==='work'?'Passer':'Reprendre'}</button><button class="btn ghost" data-act="zen">Plein écran</button></div>
+ ${durRow()}
  <p class="small">${minsOn(dkey())} min aujourd’hui · ${Math.floor(w7/60)} h ${pad(w7%60)} sur 7 jours</p></section>`}
 function drawTimer(){const tot=(P.phase==='work'?S.set.work:S.set.brk)*60;
- $$('.tm-time').forEach(e=>e.textContent=fmt(P.left));$$('.tm-bar').forEach(e=>e.style.width=(100-P.left/tot*100)+'%');$$('.tm-go').forEach(e=>e.textContent=P.run?'Pause':'Démarrer')}
+ $$('.tm-time').forEach(e=>e.textContent=fmt(P.left));$$('.tm-bar').forEach(e=>e.style.width=Math.max(0,100-P.left/Math.max(tot,P.left)*100)+'%');$$('.tm-go').forEach(e=>e.textContent=P.run?'Pause':'Démarrer')}
 function phase(p){P.phase=p;P.run=false;P.left=(p==='work'?S.set.work:S.set.brk)*60;render();trayLater()}
 function tick(){if(!P.run)return;P.left=Math.max(0,Math.round((P.end-Date.now())/1000));
  if(P.left<=0){if(P.phase==='work'){const k=dkey();S.focus[k]=S.focus[k]||{};S.focus[k][P.mat]=(S.focus[k][P.mat]||0)+S.set.work;
@@ -443,7 +500,8 @@ function render(){const dl=daysLeft(),wk=Math.floor(Math.max(0,dl)/7);
  $('#count').innerHTML=dl>0?`<span class="j">J-${dl}</span> · ${esc(S.set.cname)}`:`<span class="j">${dl===0?'Jour J':'Terminé'}</span>`;
  if(document.body.classList.contains('widget'))$('#widget').innerHTML=vWidget();
  else{const r=route();$('#view').innerHTML=V[r]();$$('#tabs a').forEach(a=>a.getAttribute('href')==='#'+r?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current'))}
- drawTimer()}
+
+ if(zenOn)$('#zen').innerHTML=zenHTML();drawTimer()}
 
 /* ---------- actions ---------- */
 const find=(k,id)=>S[k].find(x=>x.id===id);
@@ -461,7 +519,14 @@ const A={
  'rem-del':id=>del('rem',id),'rem-clear':()=>{S.rem=S.rem.filter(r=>!r.off);save()},
  'week-del':id=>del('week',id),'grade-del':id=>del('grades',id),
  'pf':(id,b)=>{pf=b.dataset.v;render()},
- 'ev-del':id=>del('events',id),'err-del':id=>del('errs',id),
+ 'ev-del':id=>del('events',id),
+ 'ev-edit':id=>{editEv=id;render();setTimeout(()=>$('.evedit input')?.focus(),0)},'ev-cancel':()=>{editEv=null;render()},
+ 'ics':()=>{const k=dkey(),f=e=>pf==='all'||(pf==='DS'?(e.type==='DS'||e.type==='Concours blanc'):e.type===pf);const L=S.events.filter(e=>e.date>=k&&f(e));download('prepa-planning.ics',buildICS(L),'text/calendar');toast(L.length+' événements exportés : ouvre le fichier pour les ajouter à Calendrier.')},
+ 'rem-todos':()=>toReminders(S.todos.filter(t=>!t.done).map(t=>({t:(t.mat?t.mat+' · ':'')+t.t,at:(t.due||dkey())+' 08:00'}))),
+ 'rem-apple':()=>toReminders(upRem().map(r=>({t:r.t,at:r.at.replace('T',' ')}))),
+ 'zen':()=>zen(true),'zen-off':()=>zen(false),
+ 'p-dur':(id,b)=>setDur(b.dataset.k,b.dataset.v),
+ 'p-add':(id,b)=>{const d=+b.dataset.v*60;if(P.run){P.end=Math.max(Date.now()+1000,P.end+d*1000)}else P.left=Math.max(60,P.left+d);tick();drawTimer()},'err-del':id=>del('errs',id),
  'err-ok':id=>{const e=find('errs',id);if(!e)return;e.lvl=(e.lvl||0)+1;if(e.lvl>=REV.length){e.ok=true;toast('Erreur maîtrisée.')}else e.next=dkey(addDays(REV[e.lvl]));save()},
  'err-ko':id=>{const e=find('errs',id);if(!e)return;e.lvl=0;e.next=dkey(addDays(1));save()},
  'ed-parse':()=>{edTxt=$('#ed').value;edPrev=parseED(edTxt);if(!edPrev.length)toast('Aucune note trouvée dans ce texte.');render()},
@@ -478,9 +543,10 @@ const A={
 };
 document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const f=A[b.dataset.act];if(!f)return;
  if(b.tagName!=='INPUT')e.preventDefault();f(b.closest('[data-id]')?.dataset.id,b,e)});
-document.addEventListener('change',e=>{const t=e.target;if(t.id==='ef'){ef=t.value;$('#elist').innerHTML=eList();return}if(t.classList.contains('ed-on')){edPrev[+t.dataset.i].on=t.checked;return}if(t.classList.contains('ed-mat')){edPrev[+t.dataset.i].mat=t.value;return}if(e.target.classList.contains('p-mat')){P.mat=e.target.value;$$('.p-mat').forEach(s=>s.value=P.mat);trayLater()}});
+document.addEventListener('change',e=>{const t=e.target;if(t.classList.contains('p-custom')){setDur(t.dataset.k,t.value);return}if(t.id==='ef'){ef=t.value;$('#elist').innerHTML=eList();return}if(t.classList.contains('ed-on')){edPrev[+t.dataset.i].on=t.checked;return}if(t.classList.contains('ed-mat')){edPrev[+t.dataset.i].mat=t.value;return}if(e.target.classList.contains('p-mat')){P.mat=e.target.value;$$('.p-mat').forEach(s=>s.value=P.mat);trayLater()}});
 document.addEventListener('input',e=>{if(e.target.id==='tq'){tq=e.target.value;$('#tlist').innerHTML=tList()}if(e.target.id==='eq'){eq=e.target.value;$('#elist').innerHTML=eList()}});
 const F={
+ 'f-pset':d=>{setDur('work',d.get('work'));setDur('brk',d.get('brk'));toast('Durées enregistrées.')},
  'f-quick':d=>{S.todos.push({id:nid(),t:d.get('t').trim(),mat:d.get('mat')||'',due:dkey(),prio:'normale',done:false});save();setTimeout(()=>$('#f-quick input')?.focus(),0)},
  'f-todo':d=>{S.todos.push({id:nid(),t:d.get('t').trim(),mat:d.get('mat'),due:d.get('due')||'',prio:d.get('prio'),done:false});save();toast('Tâche ajoutée.')},
  'f-goal':d=>{S.goals.unshift({id:nid(),t:d.get('t').trim(),hz:d.get('hz'),due:d.get('due')||'',steps:[]});save()},
@@ -489,11 +555,11 @@ const F={
  'f-err':d=>{S.errs.push({id:nid(),mat:d.get('mat'),chap:d.get('chap').trim(),src:d.get('src'),type:d.get('type'),err:d.get('err').trim(),fix:d.get('fix').trim(),date:dkey(),next:dkey(addDays(1)),lvl:0});save();toast('Erreur notée : à revoir demain.')},
  'f-week':d=>{S.week.push({id:nid(),day:+d.get('day'),h:d.get('h'),type:d.get('type'),mat:d.get('mat'),label:d.get('label').trim()});save()},
  'f-grade':d=>{const v=parseFloat(String(d.get('v')).replace(',','.')),mx=parseFloat(d.get('max'))||20;if(isNaN(v))return;S.grades.push({id:nid(),mat:d.get('mat'),v,max:mx,coef:parseFloat(d.get('coef'))||1,type:d.get('type'),date:d.get('date')||dkey()});save();toast('Note ajoutée.')},
- 'f-pset':d=>{S.set.work=Math.min(120,Math.max(5,+d.get('work')||25));S.set.brk=Math.min(60,Math.max(1,+d.get('brk')||5));if(!P.run)P.left=(P.phase==='work'?S.set.work:S.set.brk)*60;save();toast('Durées enregistrées.')},
  'f-set':d=>{S.set.cname=d.get('cname').trim()||DEFSET.cname;S.set.concours=d.get('concours');save();toast('Compte à rebours mis à jour.')},
  'f-subj':d=>{const l=[...new Set(d.get('s').split(/\n|,/).map(x=>x.trim()).filter(Boolean))];if(!l.length)return;S.set.subjects=l;if(!l.includes(P.mat))P.mat=l[0];save();toast('Matières enregistrées.')}
 };
 document.addEventListener('submit',e=>{e.preventDefault();const f=e.target;
+ if(f.classList.contains('evedit')){const ev=find('events',f.dataset.id),d=new FormData(f);if(ev){Object.assign(ev,{date:d.get('date'),h:d.get('h')||'',type:d.get('type'),mat:d.get('mat'),label:d.get('label').trim(),plan:false})}editEv=null;save();toast('Planning modifié.');return}
  if(f.classList.contains('addstep')){const g=find('goals',f.dataset.goal),v=new FormData(f).get('s').trim();if(g&&v){g.steps.push({t:v,d:false});save();setTimeout(()=>$(`.addstep[data-goal="${CSS.escape(g.id)}"] input`)?.focus(),0)}return}
  F[f.id]?.(new FormData(f),f)});
 window.addEventListener('hashchange',()=>{impArm=false;render();window.scrollTo(0,0)});
